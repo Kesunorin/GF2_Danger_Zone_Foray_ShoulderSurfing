@@ -1,0 +1,11 @@
+# Build output and user configuration
+/build/
+*.log
+*.previous.log
+*.panel.tmp
+*.obj
+*.pdb
+*.exp
+*.lib
+*.exe
+*.dll
