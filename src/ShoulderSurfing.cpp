@@ -1701,9 +1701,9 @@ DWORD WINAPI initialize(void *) {
         directory = path;
         directory = directory.substr(0, directory.find_last_of(L"\\/"));
         iniPath = directory + L"\\GF2ShoulderSurfing.ini";
-        logPath = directory + L"\\GF2ShoulderSurfingV52.log";
+        logPath = directory + L"\\GF2ShoulderSurfingV53.log";
         runtimeLog.configure(logPath);
-        log("GF2 ShoulderSurfing 0.52.0 initialization; dynamic runtime APIs, metadata bindings and frame entry; up to two hooks");
+        log("GF2 ShoulderSurfing 0.53.0 initialization; behind-camera attack markers outside canvas; dynamic runtime APIs, metadata bindings and frame entry; up to two hooks");
         rejectOtherModVersions();
         loadConfig();
         api.initialize();

@@ -107,9 +107,20 @@ bool applyNativeAttackProjection(Method method, void *data, void *stack) {
     void *args[] = {&world};
     auto desired = api.value<Vec3>(worldToScreen, projection, args),
          nativeScreen = api.value<Vec3>(worldToScreen, source, args);
-    if (!finite(desired) || !finite(nativeScreen) || nativeScreen.z <= .0001f ||
-        std::abs(desired.z) <= .0001f)
+    if (!finite(desired) || !finite(nativeScreen) || nativeScreen.z <= .0001f)
         return false;
+    // W2S mirrors behind-camera targets into otherwise valid screen coordinates.
+    // The native helper's Vector3 -> HUD conversion loses this signed depth, so
+    // returning without a rewrite would leave the original top-down dot visible.
+    // Move only this registered marker's point outside the canvas, as for bars;
+    // the next front-facing projection restores it without changing active/alpha.
+    bool behind = desired.z <= .08f;
+    if (behind) {
+        Vec3 outside{};
+        if (!headBarScreenPoint(desired, api.value<int>(getWidth), api.value<int>(getHeight), outside))
+            return false;
+        desired = outside;
+    }
     Vec3 throughNative{desired.x, desired.y, nativeScreen.z};
     void *unproject[] = {&throughNative};
     auto remapped = api.value<Vec3>(screenToWorld, source, unproject);
@@ -127,8 +138,8 @@ bool applyNativeAttackProjection(Method method, void *data, void *stack) {
     memcpy(static_cast<char *>(stack) + 8, &remapped, 12);
     if (GetTickCount64() - attackLastLog >= 5000) {
         logDebug(
-            "Native attack marker projection: world=(%.3f %.3f %.3f) shoulderScreen=(%.2f %.2f); one native UI update",
-            world.x, world.y, world.z, desired.x, desired.y);
+            "Native attack marker projection: world=(%.3f %.3f %.3f) shoulderScreen=(%.2f %.2f) depth=%.3f behind=%d; one native UI update",
+            world.x, world.y, world.z, desired.x, desired.y, desired.z, behind);
         attackLastLog = GetTickCount64();
     }
     return true;
