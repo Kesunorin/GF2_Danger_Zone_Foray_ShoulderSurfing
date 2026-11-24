@@ -11,7 +11,9 @@
 #include "RuntimeExports.h"
 #include "RuntimeEntry.h"
 #include "BindingCatalog.h"
+#include "BindingMigration.h"
 #include "BindingShape.h"
+#include "EventBindings.h"
 namespace runtime {
 using Obj = void *;
 using Class = void *;
@@ -74,6 +76,7 @@ struct Api {
     std::unordered_map<std::string, Method> methodAliases;
     std::unordered_map<Obj, std::unordered_map<std::string, std::vector<Class>>> shapeIndexes;
     std::unordered_map<Class, std::string> classShapes;
+    std::unordered_map<Class, bool> migrationValidated;
     FARPROC exportAt(unsigned index) {
         if (!exportResolver)
             throw std::runtime_error("Runtime API resolver not initialized");
@@ -171,6 +174,12 @@ struct Api {
     const BindingClass *descriptor(const std::string &name, const char *image = nullptr);
     const BindingClass *descriptor(Class c);
     std::string shape(Class c);
+    const MigrationType *migrationType(const std::string &name, bool target = false);
+    bool migrationValid(Class c);
+    const MigrationField *migrationField(Class c, const char *name);
+    const MigrationMethod *migrationMethod(Class c, const char *name, int argc);
+    bool namedClass(Class c, const char *expected);
+    Field uniqueReferenceField(Class c, Class type, bool isStatic = false);
     Class find(const char *image, const char *ns, const char *name);
     bool equivalent(const char *expected, const void *actual);
     bool signature(Method m, const BindingMethod &spec);

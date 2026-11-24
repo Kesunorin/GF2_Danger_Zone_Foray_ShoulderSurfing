@@ -19,34 +19,12 @@ void resetNativeThrowInput() {
 }
 void bindNativeThrowInput(Class entity) {
     try {
-        auto classCount = reinterpret_cast<unsigned (*)(Obj)>(api.exportAt(0x77));
-        auto classAt = reinterpret_cast<Class (*)(Obj, unsigned)>(api.exportAt(0x76));
         auto typeName = reinterpret_cast<const char *(*)(const void *)>(api.exportAt(0xd7));
         auto paramType = reinterpret_cast<const void *(*)(Method, unsigned)>(api.exportAt(0x85));
-        size_t assemblyCount{};
-        auto list = api.assemblies(api.domainGet(), &assemblyCount);
-        if (assemblyCount > 1024)
-            throw std::runtime_error("Throw input assembly bound");
-        unsigned matches{};
-        for (size_t i = 0; i < assemblyCount; i++) {
-            auto image = api.imageOf(list[i]);
-            auto name = api.nameOfImage(image);
-            if (!name || strcmp(name, "Assembly-CSharp.dll"))
-                continue;
-            unsigned count = classCount(image);
-            if (count > 100000)
-                throw std::runtime_error("Throw input class bound");
-            for (unsigned index = 0; index < count; index++) {
-                auto candidate = classAt(image, index);
-                if (strcmp(api.className(candidate), "MILBMKMGJGB"))
-                    continue;
-                if (strcmp(typeName(api.classType(candidate)), "AKGDBJLILIF.MILBMKMGJGB"))
-                    continue;
-                throwInputClass = candidate;
-                ++matches;
-            }
-        }
-        if (matches != 1)
+        throwInputClass = api.find("Assembly-CSharp.dll", "", "MILBMKMGJGB");
+        auto input = api.find("Assembly-CSharp.dll", "", "AKGDBJLILIF");
+        const auto inputType = std::string(typeName(api.classType(input))) + ".";
+        if (std::string(typeName(api.classType(throwInputClass))).compare(0, inputType.size(), inputType))
             throw std::runtime_error("Throw range stage identity changed");
         throwInputUpdate = api.require(throwInputClass, "ELCFJALJBAD", 4);
         auto vectorClass = api.find("UnityEngine.CoreModule.dll", "UnityEngine", "Vector3");

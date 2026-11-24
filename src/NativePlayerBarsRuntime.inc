@@ -280,12 +280,11 @@ void bindNativePlayerBars() {
             throw std::runtime_error("Player endurance owner layout changed");
         playerBarsEvent = healthField(healthEventClass, "<LANACFHLFGH>k__BackingField");
         playerBarsEventClass = healthDeclared(playerBarsEvent);
-        playerBarsFirst = healthField(playerBarsEventClass, "NHAMOBBJGFA");
-        playerBarsSecond = healthField(playerBarsEventClass, "EDBCECCNKDH");
+        nativeEventBranches(playerBarsEventClass, playerBarsFirst, playerBarsSecond);
         playerBarsListenersClass = healthDeclared(playerBarsFirst);
         if (healthDeclared(playerBarsSecond) != playerBarsListenersClass)
             throw std::runtime_error("Player endurance branch mismatch");
-        playerBarsSet = healthField(playerBarsListenersClass, "PFCLPNPJDNI");
+        playerBarsSet = nativeListenerSet(playerBarsListenersClass);
         playerBarsSetClass = healthDeclared(playerBarsSet);
         playerBarsSlots = healthField(playerBarsSetClass, "_slots");
         playerBarsLast = healthField(playerBarsSetClass, "_lastIndex", false);

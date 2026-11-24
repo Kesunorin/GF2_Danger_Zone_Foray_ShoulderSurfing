@@ -18,7 +18,7 @@ void bindNativeAdsZoom(Class entity) {
         zoomShootClass = opticFieldType(zoomShoot);
         if (zoomShootClass != api.find("Assembly-CSharp.dll", "", "PCALAAPACOK"))
             throw std::runtime_error("Native ADS timer class changed");
-        zoomOwner = checkedOpticField(zoomShootClass, "LMGIFJEKBHJ", true);
+        zoomOwner = api.uniqueReferenceField(zoomShootClass, entity);
         if (opticFieldType(zoomOwner) != entity)
             throw std::runtime_error("Native ADS owner class changed");
         zoomActive = checkedOpticField(zoomShootClass, "KMFIKHKKIJE", false, "Boolean");

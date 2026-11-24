@@ -56,4 +56,23 @@ inline std::vector<std::string> bindingParameters(const char *parameters) {
     }
     return result;
 }
+inline bool additiveBindingShape(const std::string &baseline, const std::string &current) {
+    auto rows = [](const std::string &s) {
+        std::vector<std::string> result;
+        size_t begin{};
+        while (begin < s.size()) {
+            auto end = s.find('\n', begin);
+            result.push_back(s.substr(begin, end == std::string::npos ? end : end - begin));
+            if (end == std::string::npos)
+                break;
+            begin = end + 1;
+        }
+        return result;
+    };
+    auto expected = rows(baseline), actual = rows(current);
+    // Full multiset inclusion: additions are bounded; removed/retyped members
+    // or a changed parent do not count as additive updates.
+    return actual.size() >= expected.size() && actual.size() * 100 <= expected.size() * 112 &&
+           std::includes(actual.begin(), actual.end(), expected.begin(), expected.end());
+}
 } // namespace runtime

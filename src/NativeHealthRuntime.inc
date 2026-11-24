@@ -41,6 +41,12 @@ Field healthField(Class c, const char *key, bool reference = true) {
         throw std::runtime_error(std::string("Health field layout: ") + key);
     return f;
 }
+Field nativeListenerSet(Class c) {
+    return runtime::listenerSet(api, c);
+}
+void nativeEventBranches(Class c, Field &first, Field &second) {
+    runtime::eventBranches(api, c, first, second);
+}
 Obj healthRef(Obj obj, Field f) {
     return obj ? api.read<Obj>(obj, f) : nullptr;
 }
@@ -323,9 +329,8 @@ void bindNativeHealth() {
         healthPoint = healthField(healthEventClass, "ELJDBGBNGKI");
         healthPositionEvent = healthField(healthEventClass, "DJIGCBBJPGK");
         auto ev = healthDeclared(healthPositionEvent);
-        healthEventFirst = healthField(ev, "NHAMOBBJGFA");
-        healthEventSecond = healthField(ev, "EDBCECCNKDH");
-        healthEventSet = healthField(healthDeclared(healthEventFirst), "PFCLPNPJDNI");
+        nativeEventBranches(ev, healthEventFirst, healthEventSecond);
+        healthEventSet = nativeListenerSet(healthDeclared(healthEventFirst));
         healthSetClass = healthDeclared(healthEventSet);
         healthSetSlots = healthField(healthSetClass, "_slots");
         healthSetLast = healthField(healthSetClass, "_lastIndex", false);

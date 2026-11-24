@@ -624,7 +624,7 @@ Field checkedOpticField(Class c, const char *name, bool reference, const char *p
     memcpy(&offset, static_cast<char *>(f) + 24, 4);
     auto type = opticFieldType(f);
     if (offset < 16 || !type || api.isValueType(type) == reference ||
-        (primitive && strcmp(api.className(type), primitive)))
+        (primitive && !api.namedClass(type, primitive)))
         throw std::runtime_error("Optic field type/layout changed");
     return f;
 }
@@ -1701,9 +1701,9 @@ DWORD WINAPI initialize(void *) {
         directory = path;
         directory = directory.substr(0, directory.find_last_of(L"\\/"));
         iniPath = directory + L"\\GF2ShoulderSurfing.ini";
-        logPath = directory + L"\\GF2ShoulderSurfingV53.log";
+        logPath = directory + L"\\GF2ShoulderSurfingV54.log";
         runtimeLog.configure(logPath);
-        log("GF2 ShoulderSurfing 0.53.0 initialization; behind-camera attack markers outside canvas; dynamic runtime APIs, metadata bindings and frame entry; up to two hooks");
+        log("GF2 ShoulderSurfing 0.54.0 initialization; managed-update migration and bounded additive structures; dynamic runtime APIs, metadata bindings and frame entry; up to two hooks");
         rejectOtherModVersions();
         loadConfig();
         api.initialize();

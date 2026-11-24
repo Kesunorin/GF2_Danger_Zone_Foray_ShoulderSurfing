@@ -178,7 +178,15 @@ void bindNativeAttackProjection() {
         attackUiClass = api.find("Assembly-CSharp.dll", "", "GFLCGAOBBKC");
         auto parent = reinterpret_cast<Class (*)(Class)>(api.exportAt(0x26));
         auto singleton = parent(parent(attackUiClass));
-        attackUiInstance = api.field(singleton, "BOABAJCEPNO");
+        attackUiInstance = nullptr;
+        void *singletonIterator{};
+        while (auto f = api.fields(singleton, &singletonIterator)) {
+            if (!(api.fieldFlags(f) & 16) || healthDeclared(f) != attackUiClass)
+                continue;
+            if (attackUiInstance)
+                throw std::runtime_error("Attack projection singleton is ambiguous");
+            attackUiInstance = f;
+        }
         if (!attackUiInstance || !(api.fieldFlags(attackUiInstance) & 16) ||
             healthDeclared(attackUiInstance) != attackUiClass)
             throw std::runtime_error("Attack projection singleton changed");

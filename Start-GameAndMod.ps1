@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 
 # Shared by the launcher, manual attach, build and package scripts.
 function Get-ModRelease {
-    return [pscustomobject]@{ Version = '0.53.0'; Dll = 'GF2ShoulderSurfingV53.dll' }
+    return [pscustomobject]@{ Version = '0.54.0'; Dll = 'GF2ShoulderSurfingV54.dll' }
 }
 
 function Write-LauncherLog([string]$Message) {

@@ -76,6 +76,80 @@ inline std::string Api::shape(Class c) {
     }
     return joinBindingShape(std::move(rows));
 }
+inline const MigrationType *Api::migrationType(const std::string &name, bool target) {
+    const MigrationType *found{};
+    for (const auto &entry : migrationTypes) {
+        if (name != (target ? entry.target : entry.name))
+            continue;
+        if (found && strcmp(found->name, entry.name))
+            throw std::runtime_error("Ambiguous migration type: " + name);
+        found = &entry;
+    }
+    return found;
+}
+inline bool Api::migrationValid(Class c) {
+    if (!c)
+        return false;
+    auto cached = migrationValidated.find(c);
+    if (cached != migrationValidated.end())
+        return cached->second;
+    auto spec = migrationType(fullName(c), true);
+    bool valid = spec && shape(c) == spec->shape;
+    migrationValidated[c] = valid;
+    return valid;
+}
+inline const MigrationField *Api::migrationField(Class c, const char *name) {
+    if (!migrationValid(c))
+        return nullptr;
+    auto owner = migrationType(fullName(c), true);
+    for (const auto &entry : migrationFields)
+        if (!strcmp(entry.owner, owner->name) && !strcmp(entry.name, name))
+            return &entry;
+    return nullptr;
+}
+inline const MigrationMethod *Api::migrationMethod(Class c, const char *name, int argc) {
+    if (!migrationValid(c))
+        return nullptr;
+    auto owner = migrationType(fullName(c), true);
+    const MigrationMethod *found{};
+    for (const auto &entry : migrationMethods)
+        if (!strcmp(entry.owner, owner->name) && !strcmp(entry.name, name) &&
+            int(bindingParameters(entry.params).size()) == argc) {
+            if (found)
+                throw std::runtime_error(std::string("Ambiguous migration overload: ") + name);
+            found = &entry;
+        }
+    return found;
+}
+inline bool Api::namedClass(Class c, const char *expected) {
+    if (!c)
+        return false;
+    if (!strcmp(className(c), expected) || fullName(c) == expected)
+        return true;
+    auto migration = migrationType(expected);
+    return migration && fullName(c) == migration->target && migrationValid(c);
+}
+inline Field Api::uniqueReferenceField(Class c, Class type, bool isStatic) {
+    Field found{};
+    if (!type || isValueType(type))
+        throw std::runtime_error("Reference field requires a reference type");
+    for (unsigned depth{}; c && depth < 8; ++depth, c = classParent(c)) {
+        void *iterator{};
+        unsigned count{};
+        while (auto f = fields(c, &iterator)) {
+            if (++count > 512)
+                throw std::runtime_error("Typed reference field enumeration bound");
+            if (bool(fieldFlags(f) & 16) != isStatic || classFromType(fieldType(f)) != type)
+                continue;
+            if (found)
+                throw std::runtime_error("Ambiguous typed reference field");
+            found = f;
+        }
+    }
+    if (!found)
+        throw std::runtime_error("Typed reference field unavailable");
+    return found;
+}
 inline Class Api::find(const char *imageNameRequested, const char *ns, const char *name) {
     std::string requested = *ns ? std::string(ns) + "." + name : name;
     std::string key = std::string(imageNameRequested) + ":" + requested;
@@ -85,6 +159,45 @@ inline Class Api::find(const char *imageNameRequested, const char *ns, const cha
     auto image = findImage(imageNameRequested);
     auto found = classFromName(image, ns, name);
     auto spec = bindingsEnabled ? descriptor(requested, imageNameRequested) : nullptr;
+    if (!found && bindingsEnabled) {
+        auto migration = migrationType(requested);
+        if (migration && !strcmp(migration->image, imageNameRequested)) {
+            std::string target = migration->target;
+            auto dot = target.rfind('.');
+            auto candidate = classFromName(image, dot == std::string::npos ? "" : target.substr(0, dot).c_str(),
+                                          dot == std::string::npos ? target.c_str() : target.substr(dot + 1).c_str());
+            if (!candidate) {
+                auto count = imageClassCount(image);
+                if (count > 100000)
+                    throw std::runtime_error("Migration class enumeration bound");
+                for (unsigned i = 0; i < count; ++i) {
+                    auto item = imageClass(image, i);
+                    if (!item || fullName(item) != target)
+                        continue;
+                    if (candidate)
+                        throw std::runtime_error("Ambiguous nested migration type: " + requested);
+                    candidate = item;
+                }
+            }
+            if (candidate && migrationValid(candidate)) {
+                found = candidate;
+                ++resolvedClasses;
+            }
+        }
+    }
+    if (!found && !spec) {
+        auto count = imageClassCount(image);
+        if (count > 100000)
+            throw std::runtime_error("Named nested class enumeration bound");
+        for (unsigned i = 0; i < count; ++i) {
+            auto item = imageClass(image, i);
+            if (!item || fullName(item) != requested)
+                continue;
+            if (found)
+                throw std::runtime_error("Ambiguous named nested type: " + requested);
+            found = item;
+        }
+    }
     if (!found && spec) {
         auto index = shapeIndexes.find(image);
         if (index == shapeIndexes.end()) {
@@ -114,10 +227,14 @@ inline Class Api::find(const char *imageNameRequested, const char *ns, const cha
             }
             index = shapeIndexes.emplace(image, std::move(candidates)).first;
         }
-        auto bucket =
-            index->second.find(std::to_string(spec->fieldCount) + ":" + std::to_string(spec->methodCount));
-        if (bucket != index->second.end())
-            for (auto candidate : bucket->second) {
+        for (const auto &bucket : index->second) {
+            auto separator = bucket.first.find(':');
+            auto fieldCount = std::stoul(bucket.first.substr(0, separator));
+            auto methodCount = std::stoul(bucket.first.substr(separator + 1));
+            if (fieldCount < spec->fieldCount || methodCount < spec->methodCount ||
+                (fieldCount + methodCount + 1) * 100 > (spec->fieldCount + spec->methodCount + 1) * 112)
+                continue;
+            for (auto candidate : bucket.second) {
                 auto liveShape = classShapes.find(candidate);
                 if (liveShape == classShapes.end()) {
                     try {
@@ -126,12 +243,13 @@ inline Class Api::find(const char *imageNameRequested, const char *ns, const cha
                         continue;
                     }
                 }
-                if (liveShape->second != spec->shape)
+                if (!additiveBindingShape(spec->shape, liveShape->second))
                     continue;
                 if (found)
                     throw std::runtime_error("Ambiguous structural class: " + requested);
                 found = candidate;
             }
+        }
         if (!found)
             throw std::runtime_error("Missing structural class: " + requested);
         ++resolvedClasses;
@@ -147,6 +265,13 @@ inline bool Api::equivalent(const char *expected, const void *actual) {
     std::string current = checkedText(typeName(actual));
     if (current == expected)
         return true;
+    auto migration = migrationType(expected);
+    if (migration) {
+        auto dot = std::string(expected).rfind('.');
+        auto expectedClass = find(migration->image, dot == std::string::npos ? "" : std::string(expected).substr(0, dot).c_str(),
+                                  dot == std::string::npos ? expected : expected + dot + 1);
+        return classFromType(actual) == expectedClass;
+    }
     auto spec = descriptor(std::string(expected));
     if (spec) {
         std::string name = spec->name;
@@ -169,9 +294,10 @@ inline bool Api::equivalent(const char *expected, const void *actual) {
             ++end;
         auto token = text.substr(i, end - i);
         auto tokenSpec = descriptor(token);
-        if (tokenSpec && coarseBinding(token) != token) {
+        auto tokenMigration = migrationType(token);
+        if ((tokenSpec || tokenMigration) && coarseBinding(token) != token) {
             auto dot = token.rfind('.');
-            auto c = find(tokenSpec->image, dot == std::string::npos ? "" : token.substr(0, dot).c_str(),
+            auto c = find(tokenSpec ? tokenSpec->image : tokenMigration->image, dot == std::string::npos ? "" : token.substr(0, dot).c_str(),
                           dot == std::string::npos ? token.c_str() : token.substr(dot + 1).c_str());
             translated += fullName(c);
         } else
@@ -199,6 +325,18 @@ inline Field Api::field(Class c, const char *name) {
     if (cached != fieldAliases.end())
         return cached->second;
     auto found = fieldRaw(c, name);
+    for (Class owner = c; owner; owner = classParent(owner)) {
+        auto migration = migrationField(owner, name);
+        if (!migration)
+            continue;
+        auto mapped = fieldRaw(owner, migration->target);
+        if (!mapped || fieldFlags(mapped) != migration->flags || fieldOffset(mapped) != migration->offset ||
+            strcmp(checkedText(typeName(fieldType(mapped))), migration->type))
+            throw std::runtime_error(std::string("Migration field changed: ") + name);
+        fieldAliases[key] = mapped;
+        ++resolvedFields;
+        return mapped;
+    }
     const BindingField *spec{};
     Class owner = c;
     for (unsigned depth = 0; owner && depth < 8 && !spec; ++depth) {
@@ -250,6 +388,33 @@ inline Method Api::method(Class c, const char *name, int argc) {
     if (cached != methodAliases.end())
         return cached->second;
     auto found = methodRaw(c, name, argc);
+    for (Class owner = c; owner; owner = classParent(owner)) {
+        auto migration = migrationMethod(owner, name, argc);
+        if (!migration)
+            continue;
+        Method mapped{};
+        void *iter{};
+        const auto params = bindingParameters(migration->params);
+        while (auto candidate = methods(owner, &iter)) {
+            if (strcmp(methodName(candidate), migration->target) || methodParamCount(candidate) != params.size() ||
+                strcmp(typeName(methodResult(candidate)), migration->result))
+                continue;
+            unsigned impl{};
+            bool valid = methodFlags(candidate, &impl) == migration->flags;
+            for (unsigned i = 0; valid && i < params.size(); ++i)
+                valid = params[i] == typeName(methodParam(candidate, i));
+            if (!valid)
+                continue;
+            if (mapped)
+                throw std::runtime_error(std::string("Ambiguous migrated method: ") + name);
+            mapped = candidate;
+        }
+        if (!mapped)
+            throw std::runtime_error(std::string("Migration method changed: ") + name);
+        methodAliases[key] = mapped;
+        ++resolvedMethods;
+        return mapped;
+    }
     const BindingMethod *spec{};
     Class owner = c;
     for (unsigned depth = 0; owner && depth < 8 && !spec; ++depth) {
@@ -293,12 +458,14 @@ inline Method Api::requireTyped(Class c, const char *name, const std::vector<con
                                 const char *result, bool isStatic) {
     Method found{};
     for (unsigned depth = 0; c && depth < 8; ++depth, c = classParent(c)) {
+        auto migration = migrationMethod(c, name, int(params.size()));
+        auto currentName = migration ? migration->target : name;
         void *iter{};
         unsigned count{};
         while (auto m = methods(c, &iter)) {
             if (++count > 2048)
                 throw std::runtime_error("Typed overload enumeration bound");
-            if (strcmp(checkedText(methodName(m)), name) || methodParamCount(m) != params.size())
+            if (strcmp(checkedText(methodName(m)), currentName) || methodParamCount(m) != params.size())
                 continue;
             unsigned impl{};
             if (bool(methodFlags(m, &impl) & 16) != isStatic || !equivalent(result, methodResult(m)))

@@ -9,3 +9,8 @@
 *.lib
 *.exe
 *.dll
+
+# Local update dependencies, reports and captures
+/.cache/
+__pycache__/
+*.pyc

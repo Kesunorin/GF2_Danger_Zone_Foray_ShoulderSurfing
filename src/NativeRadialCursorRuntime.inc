@@ -12,12 +12,13 @@ void bindNativeRadialCursor() {
                 memcpy(&type, static_cast<char *>(f) + 8, 8);
             return type ? api.classFromType(type) : nullptr;
         };
-        auto field = [&](Class owner, const char *name, Class type, int expected) {
+        auto field = [&](Class owner, const char *name, Class type) {
             auto f = api.field(owner, name);
             int offset{};
             if (f)
                 memcpy(&offset, static_cast<char *>(f) + 24, 4);
-            if (!f || (api.fieldFlags(f) & 16) || offset != expected || declared(f) != type)
+            if (!f || (api.fieldFlags(f) & 16) || offset < 16 ||
+                offset > api.instanceSize(owner) - (api.isValueType(type) ? 4 : 8) || declared(f) != type)
                 throw std::runtime_error(std::string("Radial input field changed: ") + name);
             return f;
         };
@@ -25,9 +26,9 @@ void bindNativeRadialCursor() {
         radialMasterClass = api.find("Assembly-CSharp.dll", "", "JKHJKOIKDHO");
         radialInputClass = api.find("Assembly-CSharp.dll", "", "AKGDBJLILIF");
         auto mode = api.find("Assembly-CSharp.dll", "", "ADFKBBEONIM");
-        radialMasterField = field(radialContextClass, "<KNMKGLNOIBD>k__BackingField", radialMasterClass, 48);
-        radialInputField = field(radialMasterClass, "<KEHGKAADKCL>k__BackingField", radialInputClass, 24);
-        radialModeField = field(radialInputClass, "NKMMPDEGGPH", mode, 152);
+        radialMasterField = field(radialContextClass, "<KNMKGLNOIBD>k__BackingField", radialMasterClass);
+        radialInputField = field(radialMasterClass, "<KEHGKAADKCL>k__BackingField", radialInputClass);
+        radialModeField = field(radialInputClass, "NKMMPDEGGPH", mode);
         auto literal = api.field(mode, "RadialMenu");
         if (!literal || !(api.fieldFlags(literal) & 64) || declared(literal) != mode ||
             !api.isValueType(mode) || api.instanceSize(mode) != 20)

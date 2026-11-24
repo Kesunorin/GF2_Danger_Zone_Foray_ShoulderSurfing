@@ -72,7 +72,10 @@ int wmain(int argc, wchar_t **argv) {
                              (reinterpret_cast<uintptr_t>(localLoad) - reinterpret_cast<uintptr_t>(owner));
         } while (Module32NextW(mods, &m));
     CloseHandle(mods);
-    if (otherVersion) {
+    // The maintenance collector never installs mod hooks or changes gameplay.
+    // A loaded mod still forbids loading any second ShoulderSurfing DLL.
+    const bool metadataCollector = _wcsicmp(dll.filename().c_str(), L"GF2BindingDump.dll") == 0;
+    if (otherVersion && !metadataCollector) {
         std::wcerr
             << L"Another ShoulderSurfing version is loaded. Restart the game before attaching this build.\n";
         CloseHandle(process);
